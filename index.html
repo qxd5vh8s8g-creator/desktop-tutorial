@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Турнирный Pong (100% Локально)</title>
+    <style>
+        /* Максимально простые, автономные стили */
+        body {
+            font-family: Arial, sans-serif; /* Только системные шрифты */
+            background-color: #0d1117; 
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 850px;
+            background-color: #161b22;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        #gameCanvas {
+            background-color: #010409;
+            border: 2px solid #58a6ff;
+            border-radius: 5px;
+            cursor: none;
+            touch-action: none;
+            max-width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .ui-panel {
+            width: 100%;
+            padding: 15px;
+            background-color: #1f2937;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .flex-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            flex-wrap: wrap; 
+        }
+
+        .flex-container > div {
+            flex: 1 1 45%; 
+            min-width: 250px;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: #374151;
+            color: #ffffff;
+            border: 1px solid #4b5563;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #58a6ff;
+            color: #0d1117;
+            margin-top: 15px;
+            width: 100%;
+            border: none;
+        }
+        
+        .score-display {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #facc15;
+            text-align: center;
+        }
+        
+        .tournament-bracket {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        
+        .match-box {
+            background-color: #374151;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            line-height: 1.2;
+        }
+        
+        .match-box.active-match {
+            border: 2px solid #ff7b72;
+            box-shadow: 0 0 5px rgba(255, 123, 114, 0.7);
+        }
+        
+        .match-title {
+            font-weight: bold;
+            color: #58a6ff;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 600px) {
+            .flex-container > div {
+                min-width: unset;
+                flex: 1 1 100%;
+            }
+            .tournament-bracket {
+                 grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <h1 style="font-size: 1.5rem; color: #60a5fa; font-weight: bold;">Кубок Наций Pong</h1>
+    
+    <div id="setup-panel" class="ui-panel">
+        <div class="flex-container">
+            <div>
+                <label for="player-country" style="display: block; margin-bottom: 5px;">Ваша Страна (P1)</label>
+                <select id="player-country"></select>
+            </div>
+            <div>
+                <label for="difficulty-level" style="display: block; margin-bottom: 5px;">Уровень Сложности CPU</label>
+                <select id="difficulty-level">
+                    <option value="beginner">Новичок</option>
+                    <option value="medium">Средний</option>
+                    <option value="champion">Чемпион</option>
+                </select>
+            </div>
+        </div>
+        <button id="startTournamentButton" class="btn">Начать Турнир (8 Команд)</button>
+    </div>
+    
+    <div id="tournament-panel" class="ui-panel hidden">
+        <div class="match-title">Турнирная Сетка</div>
+        <div class="tournament-bracket" id="bracket">
+            <!-- Сетка будет сгенерирована здесь -->
+        </div>
+    </div>
+    
+    <div id="game-info" class="score-display">Настройте турнир и нажмите "Начать Турнир".</div>
+
+    <canvas id="gameCanvas" width="800" height="400" class="hidden"></canvas>
+    
+</div>
+
+<script>
+    // --- ДАННЫЕ И НАСТРОЙКИ ---
+    
+    const COUNTRIES = [
+        { code: 'RUS', name: 'Россия', flag: '🇷🇺' },
+        { code: 'USA', name: 'США', flag: '🇺🇸' },
+        { code: 'DEU', name: 'Германия', flag: '🇩🇪' },
+        { code: 'BRA', name: 'Бразилия', flag: '🇧🇷' },
+        { code: 'JPN', name: 'Япония', flag: '🇯🇵' },
+        { code: 'FRA', name: 'Франция', flag: '🇫🇷' },
+        { code: 'CAN', name: 'Канада', flag: '🇨🇦' },
+        { code: 'ITA', name: 'Италия', flag: '🇮🇹' },
+        { code: 'GBR', name: 'Великобритания', flag: '🇬🇧' },
+        { code: 'AUS', name: 'Австралия', flag: '🇦🇺' },
+        { code: 'KOR', name: 'Южная Корея', flag: '🇰🇷' },
+        { code: 'MEX', name: 'Мексика', flag: '🇲🇽' },
+    ];
+    
+    const DIFFICULTY_SETTINGS = {
+        beginner: { speed: 0.15, errorChance: 0.4, paddleSpeed: 4 }, 
+        medium: { speed: 0.25, errorChance: 0.15, paddleSpeed: 5 }, 
+        champion: { speed: 0.35, errorChance: 0.03, paddleSpeed: 6 } 
+    };
+
+    // --- НАСТРОЙКА ИГРЫ ---
+    
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const infoDisplay = document.getElementById('game-info');
+    const setupPanel = document.getElementById('setup-panel');
+    const tournamentPanel = document.getElementById('tournament-panel');
+    const startTournamentButton = document.getElementById('startTournamentButton');
+    const playerCountrySelect = document.getElementById('player-country');
+    const difficultyLevelSelect = document.getElementById('difficulty-level');
+
+    const game = {
+        width: 800, height: 400,
+        paddle: { width: 10, height: 80, speed: 6 },
+        ball: { size: 10, speedX: 5, speedY: 5 },
+        WIN_SCORE: 5 
+    };
+
+    let paddleLeft = { x: 0, y: game.height / 2 - game.paddle.height / 2, score: 0 };
+    let paddleRight = { x: game.width - game.paddle.width, y: game.height / 2 - game.paddle.height / 2, score: 0 };
+    let ball = { x: game.width / 2, y: game.height / 2, dx: game.ball.speedX, dy: game.ball.speedY };
+    let isGameRunning = false;
+    let inputY = paddleLeft.y; 
+    let currentDifficulty = DIFFICULTY_SETTINGS.medium;
+    
+    let playerTeam = null;
+    let tournamentBracket = [];
+    let currentMatchIndex = 0;
+    let roundNames = ["Четвертьфинал", "Полуфинал", "Финал"];
+
+    // --- ЛОГИКА ТУРНИРА ---
+
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    function generateTournamentBracket(playerCountryCode) {
+        let availableCountries = COUNTRIES.filter(c => c.code !== playerCountryCode);
+        shuffle(availableCountries);
+
+        const tournamentTeams = availableCountries.slice(0, 7);
+        const playerTeamData = COUNTRIES.find(c => c.code === playerCountryCode);
+        
+        const playerIndex = Math.floor(Math.random() * 8);
+        tournamentTeams.splice(playerIndex, 0, playerTeamData);
+
+        let bracket = [];
+        
+        // 1. Четвертьфинал (QF)
+        for (let i = 0; i < 4; i++) {
+            bracket.push({
+                id: `QF${i + 1}`,
+                round: 0,
+                team1: tournamentTeams[i * 2],
+                team2: tournamentTeams[i * 2 + 1],
+                winner: null,
+                isPlayerMatch: (tournamentTeams[i * 2].code === playerCountryCode || tournamentTeams[i * 2 + 1].code === playerCountryCode)
+            });
+        }
+        
+        // 2. Полуфинал (SF) - Placeholder
+        bracket.push({ id: 'SF1', round: 1, team1: null, team2: null, winner: null, isPlayerMatch: false });
+        bracket.push({ id: 'SF2', round: 1, team1: null, team2: null, winner: null, isPlayerMatch: false });
+
+        // 3. Финал (F) - Placeholder
+        bracket.push({ id: 'F1', round: 2, team1: null, team2: null, winner: null, isPlayerMatch: false });
+        
+        return bracket;
+    }
+    
+    function renderBracket() {
+        const bracketDiv = document.getElementById('bracket');
+        bracketDiv.innerHTML = '';
+        bracketDiv.style.gridTemplateColumns = roundNames.map(() => '1fr').join(' ');
+
+        roundNames.forEach((roundName, roundIndex) => {
+            const roundMatches = tournamentBracket.filter(m => m.round === roundIndex);
+            
+            const roundColumn = document.createElement('div');
+            roundColumn.innerHTML = `<div class="match-title">${roundName}</div>`;
+            roundColumn.style.display = 'flex';
+            roundColumn.style.flexDirection = 'column';
+            roundColumn.style.gap = '15px';
+            
+            roundMatches.forEach(match => {
+                const isCurrent = (tournamentBracket.indexOf(match) === currentMatchIndex) && !match.winner;
+                
+                const box = document.createElement('div');
+                box.className = `match-box ${isCurrent ? 'active-match' : ''}`;
+                
+                const team1Name = match.team1 ? `${match.team1.flag} ${match.team1.code}` : '???';
+                const team2Name = match.team2 ? `${match.team2.flag} ${match.team2.code}` : '???';
+                
+                if (match.winner) {
+                    box.innerHTML = `<div style="font-weight: bold; color: #48bb78;">${match.winner.flag} ${match.winner.code} - Победитель</div>`;
+                } else if (match.team1 && match.team2) {
+                    box.innerHTML = `
+                        <div>${team1Name}</div>
+                        <div style="border-top: 1px dashed #4b5563; margin: 4px 0;"></div>
+                        <div>${team2Name}</div>
+                    `;
+                    if (isCurrent && match.isPlayerMatch) {
+                        box.style.cursor = 'pointer';
+                        box.onclick = () => startPlayerMatch(match);
+                        box.title = "Нажмите, чтобы играть!";
+                    }
+                } else {
+                    box.innerHTML = `<div>Ожидание...</div>`;
+                }
+
+                roundColumn.appendChild(box);
+            });
+            bracketDiv.appendChild(roundColumn);
+        });
+    }
+
+    function simulateCpuMatch(match) {
+        const winnerIndex = Math.random() < 0.55 ? 1 : 2; 
+        return winnerIndex === 1 ? match.team1 : match.team2;
+    }
+    
+    function advanceTournament() {
+        if (currentMatchIndex >= tournamentBracket.length) {
+            infoDisplay.textContent = `${tournamentBracket[tournamentBracket.length - 1].winner.flag} ${tournamentBracket[tournamentBracket.length - 1].winner.code} - ЧЕМПИОН КУБКА НАЦИЙ PONG!`;
+            isGameRunning = false;
+            setupPanel.classList.remove('hidden');
+            canvas.classList.add('hidden');
+            return;
+        }
+
+        let match = tournamentBracket[currentMatchIndex];
+        
+        if (match.winner) {
+            currentMatchIndex++;
+            advanceTournament();
+            return;
+        }
+        
+        if (!match.isPlayerMatch) {
+            match.winner = simulateCpuMatch(match);
+            currentMatchIndex++;
+            advanceTournament();
+        } else {
+            infoDisplay.textContent = `Ваш следующий матч: ${match.team1.flag} ${match.team1.code} vs ${match.team2.flag} ${match.team2.code}. Нажмите на активный матч в сетке.`;
+            renderBracket();
+            canvas.classList.add('hidden');
+            setupPanel.classList.add('hidden');
+            tournamentPanel.classList.remove('hidden');
+        }
+    }
+    
+    function finalizeMatch(winnerTeam) {
+        const match = tournamentBracket[currentMatchIndex];
+        match.winner = winnerTeam;
+        
+        const nextRoundMatchIndex = match.round === 0 ? Math.floor(currentMatchIndex / 2) + 4 : 6;
+        
+        if (match.round === 0 || match.round === 1) { 
+            const nextMatch = tournamentBracket[nextRoundMatchIndex];
+            
+            const slot = (currentMatchIndex % 2 === 0 && match.round === 0) || (currentMatchIndex === 4 && match.round === 1) ? 'team1' : 'team2';
+            
+            nextMatch[slot] = winnerTeam;
+
+            nextMatch.isPlayerMatch = nextMatch.isPlayerMatch || (winnerTeam.code === playerTeam.code);
+        }
+
+        currentMatchIndex++;
+        
+        advanceTournament();
+    }
+    
+    // --- НАСТРОЙКА И ЗАПУСК ИГРЫ ---
+    
+    startTournamentButton.addEventListener('click', () => {
+        const playerCode = playerCountrySelect.value;
+        const difficulty = difficultyLevelSelect.value;
+
+        playerTeam = COUNTRIES.find(c => c.code === playerCode);
+        currentDifficulty = DIFFICULTY_SETTINGS[difficulty];
+        
+        tournamentBracket = generateTournamentBracket(playerCode);
+        currentMatchIndex = 0;
+        
+        setupPanel.classList.add('hidden');
+        tournamentPanel.classList.remove('hidden');
+        
+        advanceTournament(); 
+    });
+    
+    function startPlayerMatch(match) {
+        let logicTeamLeft = match.team1;
+        let logicTeamRight = match.team2;
+        
+        if (logicTeamLeft.code !== playerTeam.code) {
+            paddleLeft.country = logicTeamRight;
+            paddleRight.country = logicTeamLeft;
+        } else {
+            paddleLeft.country = logicTeamLeft;
+            paddleRight.country = logicTeamRight;
+        }
+
+        infoDisplay.textContent = `Игра: ${paddleLeft.country.flag} ${paddleLeft.country.code} vs ${paddleRight.country.flag} ${paddleRight.country.code}. Сложность: ${difficultyLevelSelect.options[difficultyLevelSelect.selectedIndex].text}`;
+        
+        tournamentPanel.classList.add('hidden');
+        canvas.classList.remove('hidden');
+        
+        paddleLeft.score = 0;
+        paddleRight.score = 0;
+        paddleLeft.y = game.height / 2 - game.paddle.height / 2;
+        paddleRight.y = game.height / 2 - game.paddle.height / 2;
+        resetBall(1);
+        isGameRunning = true;
+        
+        requestAnimationFrame(gameLoop);
+    }
+    
+    // --- ОСНОВНАЯ ЛОГИКА PONG ---
+
+    function resetBall(direction = 1) {
+        ball.x = game.width / 2;
+        ball.y = game.height / 2;
+        ball.dx = (direction > 0 ? game.ball.speedX : -game.ball.speedX);
+        ball.dy = (Math.random() * 2 - 1) * game.ball.speedY; 
+    }
+    
+    function draw() {
+        ctx.fillStyle = '#010409'; 
+        ctx.fillRect(0, 0, game.width, game.height);
+
+        ctx.strokeStyle = '#58a6ff';
+        ctx.setLineDash([10, 5]);
+        ctx.beginPath();
+        ctx.moveTo(game.width / 2, 0);
+        ctx.lineTo(game.width / 2, game.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#ffffff'; 
+        ctx.fillRect(paddleLeft.x, paddleLeft.y, game.paddle.width, game.paddle.height);
+        
+        ctx.fillStyle = '#9ca3af'; 
+        ctx.fillRect(paddleRight.x, paddleRight.y, game.paddle.width, game.paddle.height);
+
+        ctx.fillStyle = '#ff7b72';
+        ctx.fillRect(ball.x - game.ball.size / 2, ball.y - game.ball.size / 2, game.ball.size, game.ball.size);
+        
+        ctx.fillStyle = '#facc15';
+        ctx.font = '40px sans-serif'; 
+        ctx.textAlign = 'center';
+        ctx.fillText(paddleLeft.score, game.width / 4, 40);
+        ctx.fillText(paddleRight.score, game.width * 3 / 4, 40);
+        
+        ctx.font = '20px sans-serif'; 
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(`${paddleLeft.country.flag} ${paddleLeft.country.code}`, game.width / 4, 70);
+        ctx.fillText(`${paddleRight.country.flag} ${paddleRight.country.code}`, game.width * 3 / 4, 70);
+    }
+
+    function updateCpu() {
+        const settings = currentDifficulty;
+        const cpuCenter = paddleRight.y + game.paddle.height / 2;
+        
+        if (Math.random() < settings.errorChance) {
+            return;
+        }
+
+        if (ball.dx > 0) { 
+            const diff = ball.y - cpuCenter;
+            paddleRight.y += diff * settings.speed; 
+        }
+
+        paddleRight.y = Math.max(0, Math.min(paddleRight.y, game.height - game.paddle.height));
+    }
+
+
+    function update() {
+        // P1 (Управление мышью/сенсором)
+        const targetY = inputY - game.paddle.height / 2;
+        paddleLeft.y += (targetY - paddleLeft.y) * 0.15; 
+        paddleLeft.y = Math.max(0, Math.min(paddleLeft.y, game.height - game.paddle.height));
+
+        updateCpu();
+
+        // Движение Мяча
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+
+        if (ball.y <= 0 || ball.y >= game.height) {
+            ball.dy *= -1;
+        }
+
+        // Столкновения
+        if (ball.x <= game.paddle.width && ball.y > paddleLeft.y && ball.y < paddleLeft.y + game.paddle.height) {
+            ball.dx *= -1;
+            ball.dx = Math.min(Math.abs(ball.dx) * 1.05, 10);
+            ball.dy = (ball.y - (paddleLeft.y + game.paddle.height / 2)) * 0.3;
+        }
+
+        if (ball.x >= game.width - game.paddle.width - game.ball.size && ball.y > paddleRight.y && ball.y < paddleRight.y + game.paddle.height) {
+            ball.dx *= -1;
+            ball.dx = Math.max(-Math.abs(ball.dx) * 1.05, -10);
+            ball.dy = (ball.y - (paddleRight.y + game.paddle.height / 2)) * 0.3;
+        }
+
+        // Проверка Голов
+        if (ball.x < 0) {
+            paddleRight.score++;
+            infoDisplay.textContent = `Гол! ${paddleRight.country.code} забивает. Счет: ${paddleLeft.score} - ${paddleRight.score}`;
+            resetBall(-1); 
+            checkWin();
+        } else if (ball.x > game.width) {
+            paddleLeft.score++;
+            infoDisplay.textContent = `Гол! ${paddleLeft.country.code} забивает. Счет: ${paddleLeft.score} - ${paddleRight.score}`;
+            resetBall(1); 
+            checkWin();
+        }
+    }
+
+    function checkWin() {
+        if (paddleLeft.score >= game.WIN_SCORE || paddleRight.score >= game.WIN_SCORE) {
+            isGameRunning = false;
+            
+            const winnerTeam = paddleLeft.score > paddleRight.score ? paddleLeft.country : paddleRight.country;
+            const loserTeam = paddleLeft.score < paddleRight.score ? paddleLeft.country : paddleRight.country;
+            
+            infoDisplay.textContent = `${winnerTeam.flag} ${winnerTeam.code} побеждает ${loserTeam.flag} ${loserTeam.code} со счетом ${paddleLeft.score} - ${paddleRight.score}!`;
+            
+            setTimeout(() => {
+                finalizeMatch(winnerTeam);
+            }, 3000); 
+        }
+    }
+
+    function gameLoop() {
+        if (!isGameRunning) return;
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+    
+    // --- ОБРАБОТЧИКИ ВВОДА (Мышь/Сенсор) ---
+    
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isGameRunning) return;
+        const rect = canvas.getBoundingClientRect();
+        inputY = (e.clientY - rect.top) * (canvas.height / rect.height);
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (!isGameRunning) return;
+        const rect = canvas.getBoundingClientRect();
+        inputY = (e.touches[0].clientY - rect.top) * (canvas.height / rect.height);
+    });
+    
+    // --- ИНИЦИАЛИЗАЦИЯ ---
+    
+    function initialize() {
+        const fragment = document.createDocumentFragment();
+        COUNTRIES.forEach(country => {
+            const option = document.createElement('option');
+            option.value = country.code;
+            option.textContent = `${country.flag} ${country.name}`;
+            fragment.appendChild(option);
+        });
+        playerCountrySelect.appendChild(fragment);
+        
+        canvas.width = game.width;
+        canvas.height = game.height;
+        
+        playerCountrySelect.value = COUNTRIES[Math.floor(Math.random() * COUNTRIES.length)].code;
+        
+        paddleLeft.country = COUNTRIES.find(c => c.code === playerCountrySelect.value);
+        paddleRight.country = COUNTRIES.find(c => c.code !== playerCountrySelect.value) || COUNTRIES[0];
+        
+        draw();
+    }
+    
+    initialize();
+    
+</script>
+
+</body>
+</html>
